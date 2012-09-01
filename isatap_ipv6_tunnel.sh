@@ -8,7 +8,7 @@ echo "METHOD=$METHOD"
 
 [ x$METHOD != xppp -o x$ADDRFAM != xinet ] && { echo "METHOD=$METHOD, ADDRFAM=$ADDRFAM, not capable to setup isatap! exit!"; exit 1; }
 
-tunnel_if=ppp0
+tunnel_if=
 
 
 do_start() {
@@ -17,13 +17,15 @@ do_start() {
     echo "isatap_svr_inet_addr=$isatap_svr_inet_addr"
 
     echo "wait for if $tunnel_if to come up"
-    until ip link show $tunnel_if 2>&1 1>/dev/null; do 
+    until ip link show | grep -E '[0-9]+: ppp[0-9]+:' 2>&1 1>/dev/null; do 
         echo -n '.';
         sleep 1;
     done
+    tunnel_if=`ip link show | grep -Eo '^[0-9]+: ppp[0-9]+:' | head -n 1 | grep -Eo 'ppp[0-9]+'`
+    echo "tunnel_if=$tunnel_if"
     if_inet_addr=`ip -4 -o addr show dev ppp0 | awk '{print $4}'`
     echo "if_inet_addr=$if_inet_addr"
-    echo $if_inet_addr | grep '[0-9.]*' || { echo "fail to get inet addr on if $tunnel_if! exit!"; exit 1; }
+    echo $if_inet_addr | grep -E '([0-9]{1,3}|\.){7}' || { echo "fail to get inet addr on if $tunnel_if! exit!"; exit 1; }
 
     ip tunnel del isatap_tunnel
 
