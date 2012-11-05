@@ -19,7 +19,7 @@ check_bin_existence dd
 test "$#" = "1" || die "usage: $0 path/to/udisk"
 
 #check if the parameter is whole disk
-test -e "$1" || die "$1 does not exists" 
+test -e "/dev/$1" || die "$1 does not exists" 
 test -z "$(echo $1 | grep '[[:digit:]]')" || die 'i can only proceed on hole disk, e.g. sda hda sdb... *not* sda1 sdb2'
 
 #check usb disk info
@@ -29,12 +29,12 @@ test -n "$isusb" && echo "$1 is usb device, will install grldr.mbr" \
 		|| die "$1 is not usb device, maybe dangerous!"
 
 #check sector size
-chk_sector_size=`fdisk -ul /dev/$1 | grep -i 'Sector size.*512.*512'`
+chk_sector_size=`fdisk -u -l /dev/$1 | grep -i 'Sector size.*512.*512'`
 echo chk_sector_size=$chk_sector_size
 
 #check if usb disk have enough sectors for grldr.mbr
 test -n "$chk_sector_size" || die "sector size is not 512 bytes, i don't know the result, so exit"
-start_sector="`fdisk -ul /dev/$1 | grep -E $1[0-9]+ | head -n 1 | gawk '{print $2}'`"
+start_sector="`fdisk -u -l /dev/$1 | grep -E $1[0-9]+ | head -n 1 | gawk '{print $2}'`"
 echo start_sector=$start_sector
 test "$start_sector" -gt 18 \
     || die "not enough sectors before the first partition of $1, can't write grldr.mbr"
