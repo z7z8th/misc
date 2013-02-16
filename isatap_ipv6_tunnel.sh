@@ -5,8 +5,11 @@ echo "LOGICAL=$LOGICAL"
 echo "ADDRFAM=$ADDRFAM"
 echo "METHOD=$METHOD"
 
+[ x$MODE = x ] && MODE=start
+[ x$PHASE = x ] && PHASE=post-up
 
-[ x$METHOD != xppp -o x$ADDRFAM != xinet ] && { echo "METHOD=$METHOD, ADDRFAM=$ADDRFAM, not capable to setup isatap! exit!"; exit 1; }
+
+[ x$SKIPCHK = xn -a \( x$METHOD != xppp -o x$ADDRFAM != xinet \) ] && { echo "METHOD=$METHOD, ADDRFAM=$ADDRFAM, not capable to setup isatap! exit!"; exit 1; }
 
 tunnel_if=
 
