@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Pretty Coverity Output</title>
+<meta charset="UTF-8">
+<style>
+table { border-collapse: collapse; }
+td, th { border: solid 1px; }
+
+div#output-main { font-family: sans-serif; }
+div#summary { display: block; border: solid 1px; margin: 5px; padding: 5px; }
+div#error-types { display:table-cell; vertical-align: top; border: solid 1px; margin: 5px; padding: 5px; }
+div#error-details { display:table-cell; vertical-align: top; border: solid 1px; margin: 5px; padding: 5px; }
+span.blockTitle { color: blue; }
+h2.warning { color: red; font-weight: bold; }
+
+a:hover { color: white; background: gray; cursor: pointer; }
+div.propDiv { border: solid 2px orange; margin: 10px; padding: 10px; }
+div.error { border: solid 1px gray; margin: 10px; padding: 10px; }
+tr.event { border: solid 1px gray; margin: 0 10px; padding: 0 10px; }
+tr.mainEvent { border: solid 3px salmon; margin: 0 10px; padding: 0 10px; }
+td.eventTd { padding: 2px 10px; }
+span.tagName { color: gray; }
+span.tagValue { word-wrap: normal; }
+span.code { color: green; font-family: monospace; }
+
+a.errType { display: inline; white-space: nowrap; margin: 5px 0; }
+a.errTypeAct { display: inline; white-space: nowrap; margin: 5px 0; color: yellow; background-color: gray; }
+</style>
+</head>
+
+<body>
+<div id=output-main>
+	<div id="summary" >
+		<span class=blockTitle>Summarys: </span>
+	</div>
+	<div id="error-types">
+		<span class=blockTitle>Error Types List: </span><br />
+	</div>
+	<div id="error-details">
+		<span class=blockTitle></span><br />
+	</div>
+</div>
+<script type="text/javascript">
+/* @description  Pretty Coverity static analysis output
+ * @author  bob
+ * @changeLog
+ *      2017.09.19  Decoupling style settings. Use table to organize list of event.
+ *                  Use FileSystemObject in IE to access output/summary.txt and *.errors.xml
+ * 	    2017.09.13  Fix missing [Note ....]
+ *      2017.09.13  Fix multiple {t{ recognition in {CovLStrv2{
+ *      2017.09.12  Add {CovLStr{v1}{ parse
+ *      2017.09.11  Parse summary.txt, and generate layout
+ */
+window.onload = function() {
+/*
+	function readXMLFile(file)
+	{
+		var xmlFile = new XMLHttpRequest();
+		xmlFile.open("GET", file, false);
+		xmlFile.send(null);
+		return xmlFile.responseXML;
+	}
+*/
+	function parseCovLStrv2(s) {
+		var newS = s.replace(/^\{CovLStrv2\{/, "").replace(/\}$/, "");
+		var tList = newS.split(/\{t\{/g);
+		var msg = "";
+		for (var i=0; i<tList.length; i++) {
+			if (tList[i])
+				msg += parseCovLStrv1Inner("{"+tList[i]) + "<br />";
+		}
+		return msg;
+	}
+	
+	function parseCovLStrv1Inner(s) {
+		var matches = s.match(/\{([^\{\}]+|\{\d+\})+\}/);
+		if (!matches) {
+			console.log("Weird, no msg in "+s);
+			return s;
+		}
+		var msg = matches[0];
+		var matches = RegExp.rightContext.match(/\{[^\{\}]*\}|\{\{code\{[^\{\}]+\}\}\}/g);
+		var note = RegExp.rightContext;
+		for (var i=0; matches && i<matches.length; i++) {
+			var varN = new RegExp("\\{"+i+"\\}");
+			var valN = matches[i].replace(/^\{\{code/, "").replace(/\{/g, "").replace(/\}/g, "");
+			valN = "<span class=code>" + valN + "</span>";
+			while (varN.test(msg))
+				msg = msg.replace(varN, valN);
+		}
+		return (msg+note).replace(/\{/g, "").replace(/\}/g, "");
+	}
+	
+	function parseCovLStrv1(s) {
+		var newS = s.replace(/^\{CovLStr\{v1\}/, "").replace(/\}$/, "");
+		return parseCovLStrv1Inner(newS);
+	}
+	
+	function parseDescription(str) {
+		if (!/^\{CovLStr/.test(str))
+			return str;
+		if (/^\{CovLStrv2/.test(str))
+			return parseCovLStrv2(str);
+		if (/^\{CovLStr\{v1\}/.test(str))
+			return parseCovLStrv1(str);
+	}
+	
+	function parseTag(outputElem, inputElem, tagName, sep, hideTagName) {
+		var tags = inputElem.getElementsByTagName(tagName);
+		if(tags.length === 0)
+			return;
+		var tagVal = tags[0].firstChild.nodeValue;
+		var tagHTML = "";
+		if (!hideTagName)
+			tagHTML += "<span class=tagName>"+tagName+": </span>"
+		var isCode = false;
+		switch (tagName) {
+		case "file":
+			tagVal = tagVal.split(/^\/home\/[^\/]+\//)[1];
+			break;
+		case "function":
+			tagVal += "()";
+			isCode = true;
+			break;
+		case "description":
+			tagVal = parseDescription(tagVal);
+			break;
+		}
+		tagHTML +=	"<span class=" + (isCode ? "code" : "tagValue") + ">"+tagVal+"</span>";
+		if (typeof sep === "string")
+			tagHTML += sep;
+		var node = document.createElement("span");
+		node.innerHTML = tagHTML;
+		outputElem.appendChild(node);
+		if (typeof sep !== "string") {
+			var br = document.createElement("br");
+			outputElem.appendChild(br);
+		}
+	}
+	
+	function parseTypePropertiesGroup(outputElem, typePropElem, type) {
+		var tags = typePropElem.getElementsByTagName("type");
+		var tagVal = tags[0].firstChild.nodeValue;
+		if (tagVal === type)
+			return type;
+		
+		var typePropDiv = document.createElement("div");
+		typePropDiv.className = "propDiv";
+		parseTag(typePropDiv, typePropElem, "category", ", ");
+		parseTag(typePropDiv, typePropElem, "impact", ", ");
+		parseTag(typePropDiv, typePropElem, "cwe", ", ");
+		parseTag(typePropDiv, typePropElem, "qualityKind");
+		parseTag(typePropDiv, typePropElem, "type");
+		parseTag(typePropDiv, typePropElem, "localEffect");
+		parseTag(typePropDiv, typePropElem, "longDescription");
+		outputElem.appendChild(typePropDiv);
+		return tagVal;
+	}
+	
+	function parseEvent(outputElem, evtElem) {
+		var evtRow = document.createElement("tr");
+		var evtCellTags = document.createElement("td");
+		var evtCellDesc = document.createElement("td");
+		evtRow.className = "event";
+		evtCellTags.className = "eventTd";
+		evtCellDesc.className = "eventTd";
+		//parseTag(evtCellTags, evtElem, "main", ", ");
+		if (evtElem.getElementsByTagName("main").length !== 0)
+			evtRow.className = "mainEvent";
+		parseTag(evtCellTags, evtElem, "tag");
+		parseTag(evtCellTags, evtElem, "line");
+		parseTag(evtCellDesc, evtElem, "description", "", true);
+		evtRow.appendChild(evtCellTags);
+		evtRow.appendChild(evtCellDesc);
+		outputElem.appendChild(evtRow);	
+	}
+	
+	function parseError(outputElem, errElem, type) {
+		var errDiv = document.createElement("div");
+		errDiv.className = "error";
+		parseTag(errDiv, errElem, "file");
+		parseTag(errDiv, errElem, "function");
+		parseTag(errDiv, errElem, "score");
+		var typePropList = errElem.getElementsByTagName("typePropertiesGroup");
+		for (var i=0; i<typePropList.length; i++) {
+			type = parseTypePropertiesGroup(outputElem, typePropList[i], type);
+		}
+		var evtTable = document.createElement("table");
+		evtTable.createTHead().innerHTML = "<tr><th>Tags</th><th>Description</th></tr>";
+		var evtList = errElem.getElementsByTagName("event");
+		for (var i=0; i<evtList.length; i++) {
+			parseEvent(evtTable, evtList[i]);
+		}
+		errDiv.appendChild(evtTable);
+		outputElem.appendChild(errDiv);
+		return type;
+	}
+
+	var lastErrorElem = null;
+	function prettyErrorsXml(event) {
+		if (lastErrorElem === this)
+			return;
+		if (lastErrorElem instanceof HTMLAnchorElement) {
+			lastErrorElem.className = "errType";
+		}
+		this.className = "errTypeAct";
+		lastErrorElem = this;
+		
+		/* var xmldoc = readXMLFile(this.dataset.file); */
+		var xmlText = readTextFile(this.dataset.file);
+		xmlText = "<errorList>"+xmlText+"</errorList>";
+		var xmldoc = (new DOMParser).parseFromString(xmlText, "text/xml");
+		var errDetailsElem = document.getElementById("error-details");
+		errDetailsElem.innerHTML = "";
+		var errDetailsFragment = document.createDocumentFragment();
+		var errList = xmldoc.getElementsByTagName("error");
+		var type = null;
+		for (var i=0; i<errList.length; i++) {
+			type = parseError(errDetailsFragment, errList[i], type);
+		}
+		errDetailsElem.appendChild(errDetailsFragment);
+	}
+	function getErrorTypeList(summary) {
+		var pattern = /(Defect occurrences found\s+:)\s+(\d+)\s+Total\n([^]+)/gm;
+		var matches = pattern.exec(summary);
+		var lines = matches[3].split(/\s+/);
+		var files = "";
+		var fileList = [];
+		for (var i=1; i<lines.length; i+=2) {
+			if (lines[i]) {
+				fileList.push(lines[i+1]);
+				files += "[" + (i+1)/2 + "]: " + lines[i+1]+".errors.xml, " + lines[i]+" errors <br />";
+			}
+		}
+		
+		document.getElementById("summary").innerHTML += matches[2] + " Total";
+		return fileList;
+	}
+	
+	function readTextFile(file)
+	{
+		var xhrAccessFail = false;
+		try {
+			var rawFile = new XMLHttpRequest();
+			rawFile.open("GET", file, false); // async
+			/*
+			rawFile.onreadystatechange = function () {
+				if(rawFile.readyState === 4) {
+					if(rawFile.status === 200 || rawFile.status == 0) {
+						var allText = rawFile.responseText;
+						// alert(allText);
+					}
+				}
+			}
+			*/
+			rawFile.send(null);
+			return rawFile.responseText;
+		} catch (ex){
+			xhrAccessFail = true;
+		}
+		if (xhrAccessFail) {
+			try {
+				var fso = new ActiveXObject("Scripting.FileSystemObject");
+				var dir = location.href;
+				file = dir.substring(0, dir.lastIndexOf("/")) + "/" + file;
+				file = file.replace("file:///", "");
+				var f = fso.openTextFile(file, 1);
+				content = f.readAll();
+				f.Close();
+				return content;
+			} catch (ex) {
+				return null;
+			}
+		}
+	}
+	
+	function upperCase2Camel(text) {
+		var words = text.split(/_|\.|\s/);
+		var rets = [];
+		for (var i=0; i<words.length; i++) {
+			rets[i] = words[i].charAt(0).toUpperCase()+words[i].substring(1).toLowerCase();
+		}
+		return rets.join(" ");
+	}
+	
+	function parseSummary(allText) {
+		var fileList = getErrorTypeList(allText);
+		var errTypesElem = document.getElementById("error-types");
+		for (var i=0; i<fileList.length; i++) {
+			var f = fileList[i];
+			var a = document.createElement("a");
+			a.className = "errType";
+			a.innerText = upperCase2Camel(f);
+			a.dataset.file = "output/" + f + ".errors.xml";
+			a.onclick = prettyErrorsXml;
+			errTypesElem.appendChild(a);
+			var br = document.createElement("br");
+			errTypesElem.appendChild(br);
+		}
+	}
+
+	var summary = readTextFile("output/summary.txt");
+	if (summary) {
+		parseSummary(summary);
+		document.getElementsByClassName("errType")[0].click();
+	} else {
+		var summaryElem = document.getElementById("summary");
+		summaryElem.innerHTML += "<h2 class=warning>" + 
+					" Can't access output/summary.txt, please make sure it's there.</h2>";
+		if (/Edge\/[\d\.]+/.test(navigator.userAgent)) {
+			summaryElem.innerHTML += "<h2 class=warning>You're running Microsoft Edge, I don't know how to make it access local file output/summary.txt</h2>";
+		} else if (/Chrome\/[\d\.]+/.test(navigator.userAgent)) {
+			summaryElem.innerHTML += "<h2 class=warning>You're running Chrome, please start chrome in command line with option <span class=code>--allow-file-access-from-files</span></h2>";
+		} else if (/Trident\/[\d\.]+/.test(navigator.userAgent)) {
+			summaryElem.innerHTML += "<h2 class=warning>You're running IE, please allow the blocked content by click `Allow' or `Yes'.</h2>";
+		}
+		summaryElem.innerHTML += "<h2>You can try Firefox/Chrome/IE11, these browsers can work.</h2>";
+	}
+};
+</script>
+</body>
+</html>
